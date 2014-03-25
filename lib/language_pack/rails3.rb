@@ -67,7 +67,7 @@ private
         precompile = rake.task("assets:precompile")
         return true unless precompile.is_defined?
 
-        topic("Preparing app for Rails asset pipeline")
+        #topic("Preparing app for Rails asset pipeline")
 
         precompile.invoke(env: rake_env)
 
