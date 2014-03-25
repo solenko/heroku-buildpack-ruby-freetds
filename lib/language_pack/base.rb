@@ -2,24 +2,45 @@ require "language_pack"
 require "pathname"
 require "yaml"
 require "digest/sha1"
+require "language_pack/shell_helpers"
+require "language_pack/cache"
+require "language_pack/metadata"
+require "language_pack/fetcher"
+require "language_pack/instrument"
 
 Encoding.default_external = Encoding::UTF_8 if defined?(Encoding)
 
 # abstract class that all the Ruby based Language Packs inherit from
 class LanguagePack::Base
-  VENDOR_URL = "https://s3.amazonaws.com/heroku-buildpack-ruby"
+  include LanguagePack::ShellHelpers
 
-  attr_reader :build_path, :cache_path
+  VENDOR_URL = "https://s3-external-1.amazonaws.com/heroku-buildpack-ruby"
+
+  attr_reader :build_path, :cache
 
   # changes directory to the build_path
   # @param [String] the path of the build dir
-  # @param [String] the path of the cache dir
+  # @param [String] the path of the cache dir this is nil during detect and release
   def initialize(build_path, cache_path=nil)
-    @build_path = build_path
-    @cache_path = cache_path
-    @id = Digest::SHA1.hexdigest("#{Time.now.to_f}-#{rand(1000000)}")[0..10]
+     self.class.instrument "base.initialize" do
+      @build_path   = build_path
+      @cache        = LanguagePack::Cache.new(cache_path) if cache_path
+      @metadata     = LanguagePack::Metadata.new(@cache)
+      @id           = Digest::SHA1.hexdigest("#{Time.now.to_f}-#{rand(1000000)}")[0..10]
+      @warnings     = []
+      @deprecations = []
+      @fetchers     = {:buildpack => LanguagePack::Fetcher.new(VENDOR_URL) }
 
-    Dir.chdir build_path
+      Dir.chdir build_path
+    end
+  end
+
+  def instrument(*args, &block)
+    self.class.instrument(*args, &block)
+  end
+
+  def self.instrument(*args, &block)
+    LanguagePack::Instrument.instrument(*args, &block)
   end
 
   def self.===(build_path)
@@ -53,17 +74,28 @@ class LanguagePack::Base
 
   # this is called to build the slug
   def compile
+    write_release_yaml
+    instrument 'base.compile' do
+      if @warnings.any?
+        topic "WARNINGS:"
+        puts @warnings.join("\n")
+      end
+      if @deprecations.any?
+        topic "DEPRECATIONS:"
+        puts @deprecations.join("\n")
+      end
+    end
   end
 
-  # collection of values passed for a release
-  # @return [String] in YAML format of the result
-  def release
-    setup_language_pack_environment
-
-    {
-      "addons" => default_addons,
-      "default_process_types" => default_process_types
-    }.to_yaml
+  def write_release_yaml
+    release = {}
+    release["addons"]                = default_addons
+    release["default_process_types"] = default_process_types
+    release["config_vars"]           = default_config_vars
+    FileUtils.mkdir("tmp") unless File.exists?("tmp")
+    File.open("tmp/heroku-buildpack-release-step.yml", 'w') do |f|
+      f.write(release.to_yaml)
+    end
   end
 
   # log output
@@ -125,6 +157,7 @@ private ##################################
       end
     end.join(" ")
   end
+<<<<<<< HEAD
 
   # display error message and stop the build process
   # @param [String] error message
@@ -227,4 +260,5 @@ private ##################################
   def cache_exists?(path)
     File.exists?(cache_base + path)
   end
+
 end
