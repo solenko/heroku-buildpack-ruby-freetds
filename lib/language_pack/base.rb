@@ -157,7 +157,6 @@ private ##################################
       end
     end.join(" ")
   end
-<<<<<<< HEAD
 
   # display error message and stop the build process
   # @param [String] error message
