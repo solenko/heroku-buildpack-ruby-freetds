@@ -121,7 +121,6 @@ class LanguagePack::Base
     end
   end
 
-private ##################################
 
   # sets up the environment variables for the build process
   def setup_language_pack_environment
